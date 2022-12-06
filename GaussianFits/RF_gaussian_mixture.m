@@ -236,7 +236,7 @@ for i=1:ncl
 
     %% fit center
     B0c =  [Acenter, xpeak,ypeak, rfw0,rfw0, 0.0];   
-    [xc,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Rot_center_colfmt,B0c,XYt_i,RFaroundpeak_clean,Bminpos_c,Bmaxpos_c, myopts);
+    [xc,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_on_pts,B0c,XYt_i,RFaroundpeak_clean,Bminpos_c,Bmaxpos_c, myopts);
 
     %% check if it is center-surround or two independent conponents
     case_two_strong_components =min(RFijmax,abs(RFijmin))/max(RFijmax,abs(RFijmin)) > min_rel_comp_strength;
@@ -300,11 +300,11 @@ for i=1:ncl
     %locations, might take awhile
     if case_two_strong_components && case_separated_peaks
         problem = createOptimProblem('lsqcurvefit',...
-            'x0',B0,'objective',@Gaussian_Sum_Rot_center_surround_sep_faster,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
+            'x0',B0,'objective',@GM_for_faster_fit,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
     else
         disp('center-surround case - why?');
         problem = createOptimProblem('lsqcurvefit',...
-            'x0',B0,'objective',@Gaussian_Sum_Rot_center_surround_sep_sigmoid_cost,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
+            'x0',B0,'objective',@GM_for_faster_fit_sigmoid_cost,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
     end
     ms = MultiStart;
     [x,f] = run(ms,problem,20);
@@ -337,7 +337,7 @@ for i=1:ncl
     cr=corrcoef(mean_center(tst:ten),mean_surround(tst:ten));
     RFprops(i).surround_center_corr = cr(1,2);
 
-    model_center_surround = Gaussian_Sum_Rot_center_surround_sep([center, surround],XYtim);
+    model_center_surround = GM_on_image([center, surround],XYtim);
     RFprops(i).model = model_center_surround;
 
     if make_figure
@@ -359,7 +359,7 @@ for i=1:ncl
         RFii = RFi_nomean(:,:,ti);
         RFii = RFii(:);
         RFii =RFii(corrmask_colfmt); %data to fit, only nonzero values
-        [lambdas_fit,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Mixture_Rot_oppositesign_colfmt,lambdas,datamix,RFii,lambdas_min,lambdas_max, myopts);
+        [lambdas_fit,resnorm,residual,exitflag] = lsqcurvefit(@GM_oppositesign_scale_params,lambdas,datamix,RFii,lambdas_min,lambdas_max, myopts);
         center_dynamics(ti)=lambdas_fit(1);
         surr_dynamics(ti)=(-1)*sign(lambdas_fit(1))*lambdas_fit(2);
     end

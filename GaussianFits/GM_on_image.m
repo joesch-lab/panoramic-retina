@@ -1,4 +1,4 @@
-function F = Gaussian_Sum_Rot_center_surround_sep(params,xdata)
+function F = GM_on_image(params,xdata)
 %% data_structure.param = [Amp1, x1, y1, wx1, wy1, fi1, Amp2, wx2, wy2, fi2]
 
     g1=params(1:6);
@@ -28,8 +28,4 @@ function F = Gaussian_Sum_Rot_center_surround_sep(params,xdata)
     
     F=F1+F2;
     F=reshape(F,nrow,ncol);
-end
-
-function rotM = rotation_matrix(alpha)
-    rotM =[cos(alpha), - sin(alpha); sin(alpha),cos(alpha)];
 end

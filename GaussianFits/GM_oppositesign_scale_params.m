@@ -1,4 +1,4 @@
-function F = Gaussian_Mixture_Rot_oppositesign_colfmt(weightx,data_structure)
+function F = GM_oppositesign_scale_params(weightx,data_structure)
 %% data_structure.param = [Amp1, x1, y1, wx1, wy1, fi1, Amp2, x2, y2, wx2, wy2, fi2]
 
     xdataor=data_structure.xdata;

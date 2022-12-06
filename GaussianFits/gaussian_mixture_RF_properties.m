@@ -71,9 +71,9 @@ for i=1:ncl
 
     % get the image of the model
     if RFprops(i).center_exist==1 && RFprops(i).surround_exist==1
-        model=Gaussian_Sum_Rot_center_surround_sep([RFprops(i).center,RFprops(i).surround],XY);
+        model=GM_on_image([RFprops(i).center,RFprops(i).surround],XY);
     elseif RFprops(i).center_exist==1
-        model=Gaussian_Sum_Rot_center(RFprops(i).center,XY);
+        model=Gaussian_on_image(RFprops(i).center,XY);
     else
         continue;
     end
@@ -219,7 +219,7 @@ for i=1:ncl
 
     if RFprops(i).center_exist==1
         %compute the fit of the model if only the center was fit
-        model_center_only = Gaussian_Rot_center(RFprops(i).center,XY);
+        model_center_only = Gaussian_on_image(RFprops(i).center,XY);
         %values of data not explained by the model
         imdiff_c=model_center_only - RFprops(i).RFaroundpeak;
         %bounding box of the center mask to compute R2 value in the box
@@ -232,7 +232,7 @@ for i=1:ncl
 
         if RFprops(i).surround_exist
             %get the image of the model center-surround
-            model_center_surround = Gaussian_Sum_Rot_center_surround_sep([RFprops(i).center, RFprops(i).surround],XY);
+            model_center_surround = GM_on_image([RFprops(i).center, RFprops(i).surround],XY);
             %data values not explained by the model
             imdiff_cs=model_center_surround-RFprops(i).RFaroundpeak;
 

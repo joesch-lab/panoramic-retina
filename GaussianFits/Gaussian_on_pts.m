@@ -1,4 +1,4 @@
-function F = Gaussian_Rot_center_colfmt(params,xdata)
+function F = Gaussian_on_pts(params,xdata)
 %% data_structure.param = [Amp1, x1, y1, wx1, wy1, fi1, Amp2, wx2, wy2, fi2]
 
     g1=params(1:6);    
@@ -14,8 +14,4 @@ function F = Gaussian_Rot_center_colfmt(params,xdata)
     xdatarot1(:,1)=xdatarot1(:,1)+g1(2);
     xdatarot1(:,2)=xdatarot1(:,2)+g1(3);
     F = g1(1)*exp(   -((xdatarot1(:,1)-g1(2)).^2/(2*g1(4)^2) + (xdatarot1(:,2)-g1(3)).^2/(2*g1(5)^2) )    );        
-end
-
-function rotM = rotation_matrix(alpha)
-    rotM =[cos(alpha), - sin(alpha); sin(alpha),cos(alpha)];
 end

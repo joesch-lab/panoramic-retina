@@ -1,4 +1,4 @@
-function F = Gaussian_Sum_Rot_center_surround_sep_faster(params,datamix)
+function F = GM_for_faster_fit_sigmoid_cost(params,datamix)
 %% data_structure.param = [Amp1, x1, y1, wx1, wy1, fi1, Amp2, wx2, wy2, fi2]
 
     g1=[params(1),datamix.g1];
@@ -17,6 +17,10 @@ function F = Gaussian_Sum_Rot_center_surround_sep_faster(params,datamix)
     xdatarot2(:,1)=xdatarot2(:,1)+g2(2);
     xdatarot2(:,2)=xdatarot2(:,2)+g2(3);
     F2 = g2(1)*exp(   -((xdatarot2(:,1)-g2(2)).^2/(2*g2(4)^2) + (xdatarot2(:,2)-g2(3)).^2/(2*g2(5)^2) )    );
-        
-    F=F1+F2;
+    
+    %add cost
+    minw=min(g1(4:5));    
+    d_cs=((g1(2)-g2(2))^2+(g1(3)-g2(3))^2)^0.5;
+    cost_now=sigmoid_cost(d_cs,2*minw,3*minw)/numel(F2);
+    F=F1+F2+cost_now;
 end

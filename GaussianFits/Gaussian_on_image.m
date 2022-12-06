@@ -1,5 +1,5 @@
-function F = Gaussian_Rot_center(params,xdata)
-%% data_structure.param = [Amp1, x1, y1, wx1, wy1, fi1, Amp2, wx2, wy2, fi2]
+function F = Gaussian_on_image(params,xdata)
+%% data_structure.param = [Amp1, x1, y1, wx1, wy1, fi1]
 
     g1=params(1:6);    
     
@@ -16,8 +16,4 @@ function F = Gaussian_Rot_center(params,xdata)
     xdatarot1(:,2)=xdatarot1(:,2)+g1(3);
     F = g1(1)*exp(   -((xdatarot1(:,1)-g1(2)).^2/(2*g1(4)^2) + (xdatarot1(:,2)-g1(3)).^2/(2*g1(5)^2) )    );    
     F=reshape(F,nrow,ncol);
-end
-
-function rotM = rotation_matrix(alpha)
-    rotM =[cos(alpha), - sin(alpha); sin(alpha),cos(alpha)];
 end
