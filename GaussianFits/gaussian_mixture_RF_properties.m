@@ -284,36 +284,27 @@ for i=1:ncl
 
     %% the values below are computed from the masks of gaussians,
 
-    %max pos and negative amplitudes in data and model
-    c_max_value_fit=nan(1,nhist);
+    %max pos and negative amplitudes     
     c_max_value_data=nan(1,nhist);
-    s_max_value_fit=nan(1,nhist);
     s_max_value_data=nan(1,nhist);
 
-    %average value of all pixels in pos component in data and model
-    c_av_value_fit=nan(1,nhist);
+    %average value of all pixels in center component    
     c_av_value_data=nan(1,nhist);
 
-    %average value of all pixels in neg component in data and model
-    s_av_value_fit=nan(1,nhist);
+    %average value of all pixels in surround component    
     s_av_value_data=nan(1,nhist);
 
-    %average value of only positive pixels in pos component in data and model
-    c_same_sign_fit=nan(1,nhist);
+    %mean value of pixels in center with the same sign as the center
     c_same_sign_data=nan(1,nhist);
 
-    %average value of only neg pixels in neg component in data and model
-    s_same_sign_fit=nan(1,nhist);
+    %mean value of pixels in surround with the same sign as the surround
     s_same_sign_data=nan(1,nhist);
 
-    %size (number of pos pixels) in pos component in data and model
-    c_same_sign_size_fit=nan(1,nhist);
+    %size (number of pos pixels) in center and surround
     c_same_sign_size_data=nan(1,nhist);
-
-    %size (number of neg pixels) in ned component in data and model
-    s_same_sign_size_fit=nan(1,nhist);
     s_same_sign_size_data=nan(1,nhist);
     maxvari=0;
+    %time when maximum variation in data happens
     maxvari_ind=0;
 
     for hi=1:nhist
@@ -326,11 +317,7 @@ for i=1:ncl
             maxvari=vari;
             maxvari_ind=hi;
         end
-
-        %compute the model
-        weightx=[RFprops(i).center_dynamics(hi), RFprops(i).surround_dynamics(hi)];
-        F = Gaussian_Mixture_Rot_with_weights(weightx,data_structure);
-
+        
         %1st component
         if RFprops(i).center_exist==1
             %function value at 1std from peak
@@ -350,21 +337,6 @@ for i=1:ncl
                 if ~isempty(same_sign_vals)
                     c_same_sign_data(hi)=mean(same_sign_vals);
                     c_same_sign_size_data(hi)=length(same_sign_vals);
-                end
-            end
-
-            %get all the values from the gaussians
-            %model - 1st component
-            fitvals=F.*center_mask;
-            nnzvals=nonzeros(fitvals);
-            if ~isempty(nnzvals)
-                same_sign_vals=nnzvals(center_sign*nnzvals>fc_thresh);
-
-                c_max_value_fit(hi)=center_sign*max(center_sign*nnzvals);
-                c_av_value_fit(hi)=mean(nnzvals);
-                if ~isempty(same_sign_vals)
-                    c_same_sign_fit(hi)=mean(same_sign_vals);
-                    c_same_sign_size_fit(hi)=length(same_sign_vals);
                 end
             end
         end
@@ -391,20 +363,6 @@ for i=1:ncl
                     s_same_sign_size_data(hi)=length(same_sign_vals);
                 end
             end
-
-            %model - negative component
-            fitvals=F.*surround_mask;
-            nnzvals=nonzeros(fitvals);
-            if ~isempty(nnzvals)
-                same_sign_vals=nnzvals(surround_sign*nnzvals>fs_thresh);
-
-                s_max_value_fit(hi)=surround_sign*max(surround_sign*nnzvals);
-                s_av_value_fit(hi)=mean(nnzvals);
-                if ~isempty(same_sign_vals)
-                    s_same_sign_fit(hi)=mean(same_sign_vals);
-                    s_same_sign_size_fit(hi)=length(same_sign_vals);
-                end
-            end
         end
     end
 
@@ -412,22 +370,14 @@ for i=1:ncl
     RFprops(i).center_mask=center_mask;
     RFprops(i).surround_mask=surround_mask;
 
-    RFprops(i).center_max_value_data=c_max_value_data;
-    RFprops(i).center_max_value_fit=c_max_value_fit;
-    RFprops(i).center_av_value_fit=c_av_value_fit;
+    RFprops(i).center_max_value_data=c_max_value_data;   
     RFprops(i).center_av_value_data=c_av_value_data;
-    RFprops(i).center_same_sign_fit=c_same_sign_fit;
     RFprops(i).center_same_sign_data=c_same_sign_data;
-    RFprops(i).center_same_sign_size_fit=c_same_sign_size_fit;
     RFprops(i).center_same_sign_size_data=c_same_sign_size_data;
 
-    RFprops(i).surround_max_value_fit=s_max_value_fit;
     RFprops(i).surround_max_value_data=s_max_value_data;
-    RFprops(i).surround_av_value_fit=s_av_value_fit;
     RFprops(i).surround_av_value_data=s_av_value_data;
-    RFprops(i).surround_same_sign_fit=s_same_sign_fit;
     RFprops(i).surround_same_sign_data=s_same_sign_data;
-    RFprops(i).surround_same_sign_size_fit=s_same_sign_size_fit;
     RFprops(i).surround_same_sign_size_data=s_same_sign_size_data;
 
     RFprops(i).distance_btw_gaussian_centers=d;
