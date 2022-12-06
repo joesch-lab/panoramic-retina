@@ -32,392 +32,349 @@
 
 function RFprops = RF_gaussian_mixture_circular(rf, resfolder,file2save)
 
-     
-    %if RF array has different sequence shift dimentions accordingly
-    cluster_info_tsv_file=[];
-%     fileRF='C:\DATA\Data_for_Olga\retina\rfs_of_20201027-134944_using_spks.mat';
-%     [datafolder,filename,fileext]=fileparts(fileRF);
-    
-    if nargin > 1
-        %folder where to store results
-    %     resfolder=fullfile(datafolder,'test');
-%         resfolder = "~/codes/retina-analysis/gaussian-mixture/res";
-        %make a figure of the model fit for each cluster
-        make_figure=1;
-    else
-        make_figure = 0;
-    end
-    make_figure = 0;
-   
-    
-%     load(fileRF);
+%if RF array has different sequence shift dimentions accordingly
+cluster_info_tsv_file=[];
+
+make_figure = 0;
+
+% load(fileRF);
 if isfield(rf, 'bg_mean')
     RF=rf.filter-rf.bg_mean;
 else
     RF = rf.filter;
 end
-    RF=squeeze(RF);
-    addpath("../RFAnalysis/");
-    RF = normalize_filter(RF);
+RF=squeeze(RF);
+addpath("../RFAnalysis/");
+RF = normalize_filter(RF);
 
-    %expecteds sequence of dimensions is [nrow, ncol, ntframes, nclusters]
-    RF=shiftdim(RF,1);
-    RF=double(RF);
-
+%expecteds sequence of dimensions is [nrow, ncol, ntframes, nclusters]
+RF=shiftdim(RF,1);
+RF=double(RF);
     
-    %the method requires the mean of the RF to be at zero (for curve fitting to work)
-    %if RF has range [0,1] or [0,255] then set substract_mean=1 and the
-    %method will transform it to [-0.5, 0.5] or [-127,127] by substracting
-    %the the mean.
-    substract_mean=1;
+%the method requires the mean of the RF to be at zero (for curve fitting to work)
+%if RF has range [0,1] or [0,255] then set substract_mean=1 and the
+%method will transform it to [-0.5, 0.5] or [-127,127] by substracting
+%the the mean.
+substract_mean=1;
+
+[nrow,ncol,nhist,ncl]=size(RF);
+nrowncol=nrow*ncol;
+
+%% params for for the gaussian fit
+
+%init guess of the size of RF is 10 degrees, std is half width
+rfw0=15;%round((608*10/220)/2);
+% limits of the max and minimum width of a RF
+%minRF is 1 degree
+minwRF=3;%(608*1/220)/2;
+%maxRF is 110 degree
+maxwRF=25;%round((608*110/220)/2);
+%how close to the border RF is allowed
+border_proximity = 0;%100;
+%time window around the peak to compute the image, where to fit
+%gaussians
+twin=3;
+%time window (tpeak-twin_corr;tpeak+twin_corr) around the peak to crate the correlation mask
+% if the window is too small a lot of pixels might appear uncorrelated;
+% if it is too large random fluctuations before and after RF might
+% dominate;
+twin_corr=10;
+
+%correlation threshold, pixels with correlation below this value will
+%not be used in the fitting
+corr_threshold = 0.4;
+
+%RF variance should be a factor above the mean variance, the higher
+%this threshold, the more reliable are the results (fewer false positives but more false negatives)
+min_aboveavvar=5;
+
+%the relative strenth of positve and negative components; if amplitude
+%of one component is much smaller then the other, then it is
+%center_surround configuration
+min_rel_comp_strength = 0.75;
+
+%set verbous mode for curve fitting off
+myopts = optimoptions(@lsqcurvefit,'display','off','UseParallel',false);
+
+%grid space for the whole image
+[Xt Yt] = meshgrid(1:ncol,1:nrow);
+XYt=[];
+XYt(:,1) = Xt(:)'; %convert image into column format
+XYt(:,2) = Yt(:)';
+%square format of the image grid
+XYtim=[];
+XYtim(:,:,1)=Xt;
+XYtim(:,:,2)=Yt;
     
-    [nrow,ncol,nhist,ncl]=size(RF);
-    nrowncol=nrow*ncol;
-
-    %params for for the gaussian fit
-   
-    %init guess of the size of RF is 10 degrees, std is half width    
-    rfw0=15;%round((608*10/220)/2);  
-    % limits of the max and minimum width of a RF
-    %minRF is 1 degree
-    minwRF=3;%(608*1/220)/2;
-    %maxRF is 110 degree
-    maxwRF=25;%round((608*110/220)/2);
-    %how close to the border RF is allowed
-    border_proximity = 0;%100;
-    %time window around the peak to compute the image, where to fit
-    %gaussians
-    twin=3;
-    %time window (tpeak-twin_corr;tpeak+twin_corr) around the peak to crate the correlation mask
-    % if the window is too small a lot of pixels might appear uncorrelated;
-    % if it is too large random fluctuations before and after RF might
-    % dominate; 
-    twin_corr=10;
+%init frame pixels to better estimate noise
+frame=ones(nrow,ncol);
+frame_width = 5;
+frame(frame_width+1:nrow-frame_width+1,frame_width+1:ncol-frame_width+1)=0;
+frame_size=nnz(frame);
+peak2noise_log_threshold=15;
     
-    %correlation threshold, pixels with correlation below this value will
-    %not be used in the fitting
-    corr_threshold = 0.4;
-    
-    %RF variance should be a factor above the mean variance, the higher
-    %this threshold, the more reliable are the results (fewer false positives but more false negatives)   
-    min_aboveavvar=5;
-    
-    %the relative strenth of positve and negative components; if amplitude
-    %of one component is much smaller then the other, then it is
-    %center_surround configuration
-    min_rel_comp_strength = 0.75;
-    
-    %set verbous mode for curve fitting off
-    myopts = optimoptions(@lsqcurvefit,'display','off','UseParallel',false);
-           
-    %grid space for the whole image
-    [Xt Yt] = meshgrid(1:ncol,1:nrow);
-    XYt=[];
-    XYt(:,1) = Xt(:)'; %convert image into column format
-    XYt(:,2) = Yt(:)';
-    %square format of the image grid
-    XYtim=[];
-    XYtim(:,:,1)=Xt;
-    XYtim(:,:,2)=Yt;
-    
-    %init frame pixels to better estimate noise
-    frame=ones(nrow,ncol);
-    frame_width = 5;
-    frame(frame_width+1:nrow-frame_width+1,frame_width+1:ncol-frame_width+1)=0;
-    frame_size=nnz(frame);
-    peak2noise_log_threshold=15;
-    
-    disp(ncl);
-    %init properties structure
-%     RFprops=[];
-%    selected = [98 97 95 94 91 87 85 83 82 81 80 79 74 73 72 70 67 66 62 61 59 58 56 54 52 51 50 47 45 44 43 41 40 37 36 35 32 31 29 27 ];
-%    selected = [96 107 131 177 187];    
-    for i=1:ncl
-        disp(file2save);
-%        for sel = 1:numel(selected)
-%            i = selected(sel);
-%     for i=2168:2169
-        disp(['Processing cluster ',num2str(i),'.']);
-        RFi=RF(:,:,:,i);
-        
-        RFprops(i).error='';
-        
-        
-        %find the variance of the RF
-        %if max var is low compared to the mean var, skip the cluster
-        vari=var(RFi,0,3);
-        varinnz=numel(vari(vari==0));
-        if varinnz/nrowncol>0.1
-            RFprops(i).error='Location of the patch is at the border.';
-            continue;
-        end
-        meanv=mean(vari(:));
-        [maxv,maxind]=max(vari(:));
-        
+disp(ncl);
 
-        
-        
-        RFprops(i).mean_variance = meanv;
-        RFprops(i).max_variance = maxv;
-        RFprops(i).max_mean_variance = maxv/meanv;
-%         if maxv<min_aboveavvar*meanv
-%             RFprops(i).error='low variance of RF. No gaussians initialized.';
-%             continue;
-%         end
-        if isnan(maxv)
-            RFprops(i).error='RF contains nan values.';
-            continue;
-        end
-        
-        %else init centers of both gaussians at the peak of the variance
-        [ypeak, xpeak]=ind2sub([nrow,ncol],maxind);
-        %if the peak is close to the border skip the component
-        if xpeak <  border_proximity || xpeak > ncol-border_proximity || ypeak < border_proximity || ypeak > nrow-border_proximity
-            RFprops(i).error='peak close to border';
-            continue;
-        end
-            
-        
-        %find the time when there is most variance in the background
-        vart=zeros(1,nhist);
-        for hi=1:nhist
-            rfi_t = RFi(:,:,hi);
-            vart(hi)=var(rfi_t(:));
-        end
-        [maxvart, tpeak]=max(vart);
-        
-        if substract_mean
-            RFi_mean=median(RFi,3); 
-            RFi_nomean = RFi-RFi_mean;
-        else
-            RFi_nomean = RFi;
-        end
-        
-        %compute new Peak-to-Noise ratio
-        %noise is estimated as the variance of the pixels in a thin outer border
-        %temporal trace of the peak
-        cij=RFi_nomean(ypeak,xpeak,:);
 
-        %when does the peak happen
-        [c_peak_val, c_peaktime] = max(abs(cij));        
-        peak_val = c_peak_val^2;        
-        noisevals = RFi_nomean(:,:,c_peaktime);
-        noisevals = noisevals(frame>0);
-        noise_var=sum(noisevals.^2)/frame_size;
-        RFprops(i).peak2noise = peak_val/noise_var;
-        RFprops(i).peak2noise_log = 10*log10(RFprops(i).peak2noise);
-        if RFprops(i).peak2noise_log<peak2noise_log_threshold %too noisy
-            continue;
-        end
-        
-        
-        %compute correlations with the peak pixel
-        tst=max(1,tpeak-twin_corr);
-        ten=min(nhist,tpeak+twin_corr);        
-        cij=RFi_nomean(ypeak,xpeak,tst:ten);
-        corrim=zeros(nrow,ncol);
-        for ii=1:nrow
-            for jj=1:ncol                
-                vij=RFi_nomean(ii,jj,tst:ten);
-                if any(vij)                    
-                    cr=corrcoef(vij(:),cij(:));
-                    corrim(ii,jj)=cr(1,2);  
-                end
-            end
-        end
-        %correlation mask
-        corrmask=corrim;
-        corrmask(abs(corrmask)<corr_threshold)=0;
-        corrmask(corrmask~=0)=1;
-        RFprops(i).corr_mask = corrmask;
-        corrmask_colfmt=logical(corrmask(:)); %correlation mask in column format
-        
-        %clean RF array, use pixels which are correlated with the peak
-        RFi_nomean_clean=RFi_nomean.*corrmask;
-        
-        %find max and min amplitude at the peak and its location
-        [RFijmax,tmaxind] = max(RFi_nomean_clean(:));
-        [RFijmin,tminind] = min(RFi_nomean_clean(:));
-        [ypeakp, xpeakp, tpeakp] = ind2sub(size(RFi_nomean_clean),tmaxind);            
-        [ypeakn, xpeakn, tpeakn] = ind2sub(size(RFi_nomean_clean),tminind);            
-        
-        %first fit one gaussian around the biggest peak
-        if RFijmax>abs(RFijmin) %ON cell
-            ypeak=ypeakp; xpeak=xpeakp; tpeak=tpeakp;
-            Acenter=RFijmax;            
-            Bminpos_c=[0,border_proximity,border_proximity,minwRF,minwRF,0];
-            Bmaxpos_c =[Inf,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];
-        else %OFF cell
-            ypeak=ypeakn; xpeak=xpeakn; tpeak=tpeakn;
-            Acenter=RFijmin;
-            Bminpos_c = [-Inf,border_proximity,border_proximity,minwRF,minwRF,0];
-            Bmaxpos_c = [0,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];        
-        end
-        
-        tst=max(1,tpeak-twin);
-        ten=min(nhist,tpeak+twin);        
-        RFaroundpeak=median(RFi_nomean(:,:,tst:ten),3); 
-        RFprops(i).RFaroundpeak = RFaroundpeak;
-%         RFaroundpeak_clean=RFaroundpeak.*corrmask;
-        RFaroundpeak_clean=RFaroundpeak(:); 
-        RFaroundpeak_clean=RFaroundpeak_clean(corrmask_colfmt); %data to fit, only nonzero values
-        XYt_i=XYt(corrmask_colfmt,:); %coordinates of nonzero values
-        
-%         data = RFaroundpeak;
-%         maxamp=max(max(data(:)),abs(min(data(:))));
-%         datai=data./maxamp;      % in the range[-1,1] 
-%         imagesc(datai, [-1,1]);
-%         colormap(bluered);  
-%         disp(['Max_var/mean_var:',num2str(maxv/meanv),'.']);
-%         input("");       
-%         continue;
-%         
-        
-        %fit center
-        B0c =  [Acenter, xpeak,ypeak, rfw0,rfw0, 0.0];
-        %[xc,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Rot_center,B0c,XYt,RFaroundpeak_clean,Bminpos_c,Bmaxpos_c, myopts); 
-        [xc,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Rot_center_colfmt,B0c,XYt_i,RFaroundpeak_clean,Bminpos_c,Bmaxpos_c, myopts); 
-                  
+for i=1:ncl
+    disp(['Processing cluster ',num2str(i),'.']);
+    RFi=RF(:,:,:,i);
+    RFprops(i).error='';
 
-        %check if it is center-surround or two independent conponents 
-        case_two_strong_components =min(RFijmax,abs(RFijmin))/max(RFijmax,abs(RFijmin)) > min_rel_comp_strength;
-        d=sqrt((ypeakp-ypeakn)^2+(xpeakp-xpeakn)^2);
-        rc=2*min(xc(4:5));
-        %distance btw pos and neg peaks is further than 2std of the center
-        %gaussian
-        case_separated_peaks = d>rc;
-        
-        if case_two_strong_components && case_separated_peaks
-            RFprops(i).is_Gaborlike=1;
-            disp(['Cluster ',num2str(i),': two independent components (',num2str(min(RFijmax,abs(RFijmin))/max(RFijmax,abs(RFijmin))),').']);
-            %fit two independent gaussains (the center of the smaller is not locked to the center of the bigger)
-            %fit the 2nd gaussian and allow to re-fit the amplitude of the first
-            if xc(1)>0 %on-cell                           
-                Bminpos=[0,-Inf,border_proximity,border_proximity,minwRF,minwRF,0];
-                Bmaxpos =[Inf,0,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];                
-                Asurround = RFijmin;
-                xs=xpeakn; ys = ypeakn;
-            else %off-cell
-                Bminpos=[-Inf,0,border_proximity,border_proximity,minwRF,minwRF,0];
-                Bmaxpos =[0,Inf,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];
-                Asurround = RFijmax;
-                xs=xpeakp; ys = ypeakp;
-            end
-            B0=[xc(1),Asurround, xs,ys, rfw0,rfw0, 0.0];
-        else %fit two gaussians (the center of the smaller should be with the 2std of the bigger)
-            RFprops(i).is_Gaborlike=0;
-            disp(['Cluster ',num2str(i),': center-surround']);
-            xs_min = max(1+border_proximity,xc(2)-2*rc);
-            xs_max = min(ncol-border_proximity, xc(2)+2*rc);
-            ys_min = max(1+border_proximity,xc(3)-2*rc); 
-            ys_max = min(nrow-border_proximity,xc(3)+2*rc);
-            if xc(1)>0 %on-cell                
-                Bminpos=[0,-Inf,xs_min,ys_min,xc(4:5),0];
-                Bmaxpos =[Inf,0,xs_max,ys_max,maxwRF,maxwRF,2*pi];                
-                Asurround = RFijmin; 
-            else %off-cell
-                Bminpos=[-Inf,0,xs_min,ys_min,xc(4:5),0];
-                Bmaxpos =[0,Inf,xs_max,ys_max,maxwRF,maxwRF,2*pi];        
-                Asurround = RFijmax;                
-            end
-            B0=[xc(1),Asurround, xc(2:3),xc(4:5)*2, 0.0];                          
-        end
-        
-        %% setup the center-surround optimization
-        %precompute space of the 1st Gaussian to reduce computations in the
-        %fitting routine
-        datamix.g1=xc(2:end);  
-        X1=XYt_i(:,1)-xc(2);
-        Y1=XYt_i(:,2)-xc(3);
-        XY1=[X1,Y1];
-        rotM1=rotation_matrix(xc(6));   
-        %1st gaussian        
-        xdatarot1=XY1*rotM1; 
-        xdatarot1(:,1)=xdatarot1(:,1)+xc(2);
-        xdatarot1(:,2)=xdatarot1(:,2)+xc(3);
-        g1space  = exp(   -((xdatarot1(:,1)-xc(2)).^2/(2*xc(4)^2) + (xdatarot1(:,2)-xc(3)).^2/(2*xc(5)^2) )    );
-        datamix.data=cat(2,g1space,XYt_i);
-
-        %seed the optimisation problem at several
-        %locations, might take awhile   
-        if case_two_strong_components && case_separated_peaks
-             problem = createOptimProblem('lsqcurvefit',...
-                'x0',B0,'objective',@Gaussian_Sum_Rot_center_surround_sep_faster,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
-        else
-            disp('center-surround case - why?');
-            problem = createOptimProblem('lsqcurvefit',...
-                'x0',B0,'objective',@Gaussian_Sum_Rot_center_surround_sep_sigmoid_cost,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
-        end
-        ms = MultiStart;
-        [x,f] = run(ms,problem,20);
-
-        %update the center amplitude and set surround
-        RFprops(i).center=[x(1), xc(2:end)];
-        RFprops(i).surround=x(2:end);
-        center=RFprops(i).center;
-        surround=RFprops(i).surround;
-        
-        %compute correlation of the pixels in the surround with the pixels
-        %in the center; %this value might indicate the goodness of fit
-        center_mask=make_ellipse_mask(nrow,ncol, center(2:end));
-        surround_mask=make_ellipse_mask(nrow,ncol, surround(2:end));
-        surround_mask=surround_mask-center_mask;
-        surround_mask(surround_mask<0)=0;
-        RFprops(i).center_mask = center_mask;
-        RFprops(i).surround_mask = surround_mask;        
-
-        mean_center=zeros(1,nhist);
-        mean_surround=zeros(1,nhist);
-        for ii=1:nhist
-            ci=RFi_nomean(:,:,ii).*center_mask;
-            si=RFi_nomean(:,:,ii).*surround_mask;       
-            mean_center(ii)=mean(nonzeros(ci));
-            mean_surround(ii)=mean(nonzeros(si));            
-        end
-        tst=max(1,tpeak-twin_corr);
-        ten=min(nhist,tpeak+twin_corr);
-        cr=corrcoef(mean_center(tst:ten),mean_surround(tst:ten));
-        RFprops(i).surround_center_corr = cr(1,2);
-        
-        model_center_surround = Gaussian_Sum_Rot_center_surround_sep([center, surround],XYtim);
-        RFprops(i).model = model_center_surround;
-
-        if make_figure
-            filename=['n',num2str(i),'_tpeak',num2str(tpeak)]; 
-            figure_name = fullfile(resfolder,filename);
-            title_str=['Cluster ',num2str(i),', c-s corr ',num2str(cr(1,2)),'.'];
-            make_data_model_figure(RFaroundpeak,model_center_surround, center, surround,title_str,figure_name);
-        end
-        
-        %every time step fit scale parameters of the gaussians
-        lambdas=[0.5,0.5];
-        lambdas_min=[-Inf,-Inf];
-        lambdas_max=[Inf,Inf];
-        center_dynamics=zeros(nhist,1);
-        surr_dynamics=zeros(nhist,1); 
-        datamix.param = [RFprops(i).center, RFprops(i).surround];
-        datamix.xdata = XYt_i;
-        for ti=1:nhist
-            RFii = RFi_nomean(:,:,ti);            
-            RFii = RFii(:);
-            RFii =RFii(corrmask_colfmt); %data to fit, only nonzero values
-            [lambdas_fit,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Mixture_Rot_oppositesign_colfmt,lambdas,datamix,RFii,lambdas_min,lambdas_max, myopts); 
-            center_dynamics(ti)=lambdas_fit(1);
-            surr_dynamics(ti)=(-1)*sign(lambdas_fit(1))*lambdas_fit(2);        
-        end
-        
-        RFprops(i).center_dynamics=center_dynamics;
-        RFprops(i).surround_dynamics=surr_dynamics;
+    %find the variance of the RF
+    %if max var is low compared to the mean var, skip the cluster
+    vari=var(RFi,0,3);
+    varinnz=numel(vari(vari==0));
+    if varinnz/nrowncol>0.1
+        RFprops(i).error='Location of the patch is at the border.';
+        continue;
     end
+    meanv=mean(vari(:));
+    [maxv,maxind]=max(vari(:));
+
+    RFprops(i).mean_variance = meanv;
+    RFprops(i).max_variance = maxv;
+    RFprops(i).max_mean_variance = maxv/meanv;
+    
+    if isnan(maxv)
+        RFprops(i).error='RF contains nan values.';
+        continue;
+    end
+
+    %else init centers of both gaussians at the peak of the variance
+    [ypeak, xpeak]=ind2sub([nrow,ncol],maxind);
+    %if the peak is close to the border skip the component
+    if xpeak <  border_proximity || xpeak > ncol-border_proximity || ypeak < border_proximity || ypeak > nrow-border_proximity
+        RFprops(i).error='peak close to border';
+        continue;
+    end
+
+    %find the time when there is most variance in the background
+    vart=zeros(1,nhist);
+    for hi=1:nhist
+        rfi_t = RFi(:,:,hi);
+        vart(hi)=var(rfi_t(:));
+    end
+    [maxvart, tpeak]=max(vart);
+
+    if substract_mean
+        RFi_mean=median(RFi,3);
+        RFi_nomean = RFi-RFi_mean;
+    else
+        RFi_nomean = RFi;
+    end
+
+    %compute Peak-to-Noise ratio
+    %noise is estimated as the variance of the pixels in a thin outer border
+    %temporal trace of the peak
+    cij=RFi_nomean(ypeak,xpeak,:);
+    %when does the peak happen
+    [c_peak_val, c_peaktime] = max(abs(cij));
+    peak_val = c_peak_val^2;
+    noisevals = RFi_nomean(:,:,c_peaktime);
+    noisevals = noisevals(frame>0);
+    noise_var=sum(noisevals.^2)/frame_size;
+    RFprops(i).peak2noise = peak_val/noise_var;
+    RFprops(i).peak2noise_log = 10*log10(RFprops(i).peak2noise);
+    if RFprops(i).peak2noise_log<peak2noise_log_threshold %too noisy
+        continue;
+    end
+
+    %compute correlations with the peak pixel
+    tst=max(1,tpeak-twin_corr);
+    ten=min(nhist,tpeak+twin_corr);
+    cij=RFi_nomean(ypeak,xpeak,tst:ten);
+    corrim=zeros(nrow,ncol);
+    for ii=1:nrow
+        for jj=1:ncol
+            vij=RFi_nomean(ii,jj,tst:ten);
+            if any(vij)
+                cr=corrcoef(vij(:),cij(:));
+                corrim(ii,jj)=cr(1,2);
+            end
+        end
+    end
+    %correlation mask
+    corrmask=corrim;
+    corrmask(abs(corrmask)<corr_threshold)=0;
+    corrmask(corrmask~=0)=1;
+    RFprops(i).corr_mask = corrmask;
+    corrmask_colfmt=logical(corrmask(:)); %correlation mask in column format
+
+    %clean RF array, use pixels which are correlated with the peak
+    RFi_nomean_clean=RFi_nomean.*corrmask;
+
+    %find max and min amplitude at the peak and its location
+    [RFijmax,tmaxind] = max(RFi_nomean_clean(:));
+    [RFijmin,tminind] = min(RFi_nomean_clean(:));
+    [ypeakp, xpeakp, tpeakp] = ind2sub(size(RFi_nomean_clean),tmaxind);
+    [ypeakn, xpeakn, tpeakn] = ind2sub(size(RFi_nomean_clean),tminind);
+
+    %first fit one gaussian around the biggest peak
+    if RFijmax>abs(RFijmin) %ON cell
+        ypeak=ypeakp; xpeak=xpeakp; tpeak=tpeakp;
+        Acenter=RFijmax;
+        Bminpos_c=[0,border_proximity,border_proximity,minwRF,minwRF,0];
+        Bmaxpos_c =[Inf,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];
+    else %OFF cell
+        ypeak=ypeakn; xpeak=xpeakn; tpeak=tpeakn;
+        Acenter=RFijmin;
+        Bminpos_c = [-Inf,border_proximity,border_proximity,minwRF,minwRF,0];
+        Bmaxpos_c = [0,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];
+    end
+
+    %% summary picture of the RF
+    tst=max(1,tpeak-twin);
+    ten=min(nhist,tpeak+twin);
+    RFaroundpeak=median(RFi_nomean(:,:,tst:ten),3);
+    RFprops(i).RFaroundpeak = RFaroundpeak;
+
+    %% 2D RF without noisy pixels
+    RFaroundpeak_clean=RFaroundpeak(:);
+    RFaroundpeak_clean=RFaroundpeak_clean(corrmask_colfmt); %data to fit, only nonzero values
+    XYt_i=XYt(corrmask_colfmt,:); %coordinates of nonzero values
+
+    %% fit center
+    B0c =  [Acenter, xpeak,ypeak, rfw0,rfw0, 0.0];   
+    [xc,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Rot_center_colfmt,B0c,XYt_i,RFaroundpeak_clean,Bminpos_c,Bmaxpos_c, myopts);
+
+    %% check if it is center-surround or two independent conponents
+    case_two_strong_components =min(RFijmax,abs(RFijmin))/max(RFijmax,abs(RFijmin)) > min_rel_comp_strength;
+    d=sqrt((ypeakp-ypeakn)^2+(xpeakp-xpeakn)^2);
+    rc=2*min(xc(4:5));
+    %% distance btw pos and neg peaks is further than 2std of the center gaussian
+    case_separated_peaks = d>rc;
+
+    if case_two_strong_components && case_separated_peaks
+        RFprops(i).is_Gaborlike=1;
+        disp(['Cluster ',num2str(i),': two independent components (',num2str(min(RFijmax,abs(RFijmin))/max(RFijmax,abs(RFijmin))),').']);
+        %fit two independent gaussians (the center of the smaller is not locked to the center of the bigger)
+        %fit the 2nd gaussian and allow to re-fit the amplitude of the first
+        if xc(1)>0 %on-cell
+            Bminpos=[0,-Inf,border_proximity,border_proximity,minwRF,minwRF,0];
+            Bmaxpos =[Inf,0,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];
+            Asurround = RFijmin;
+            xs=xpeakn; ys = ypeakn;
+        else %off-cell
+            Bminpos=[-Inf,0,border_proximity,border_proximity,minwRF,minwRF,0];
+            Bmaxpos =[0,Inf,ncol-border_proximity,nrow-border_proximity,maxwRF,maxwRF,2*pi];
+            Asurround = RFijmax;
+            xs=xpeakp; ys = ypeakp;
+        end
+        B0=[xc(1),Asurround, xs,ys, rfw0,rfw0, 0.0];
+    else %fit two gaussians (the center of the smaller should be with the 2std of the bigger)
+        RFprops(i).is_Gaborlike=0;
+        disp(['Cluster ',num2str(i),': center-surround']);
+        xs_min = max(1+border_proximity,xc(2)-2*rc);
+        xs_max = min(ncol-border_proximity, xc(2)+2*rc);
+        ys_min = max(1+border_proximity,xc(3)-2*rc);
+        ys_max = min(nrow-border_proximity,xc(3)+2*rc);
+        if xc(1)>0 %on-cell
+            Bminpos=[0,-Inf,xs_min,ys_min,xc(4:5),0];
+            Bmaxpos =[Inf,0,xs_max,ys_max,maxwRF,maxwRF,2*pi];
+            Asurround = RFijmin;
+        else %off-cell
+            Bminpos=[-Inf,0,xs_min,ys_min,xc(4:5),0];
+            Bmaxpos =[0,Inf,xs_max,ys_max,maxwRF,maxwRF,2*pi];
+            Asurround = RFijmax;
+        end
+        B0=[xc(1),Asurround, xc(2:3),xc(4:5)*2, 0.0];
+    end
+
+    %% setup the center-surround optimization
+    %precompute space of the 1st Gaussian to reduce computations in the
+    %fitting routine
+    datamix.g1=xc(2:end);
+    X1=XYt_i(:,1)-xc(2);
+    Y1=XYt_i(:,2)-xc(3);
+    XY1=[X1,Y1];
+    rotM1=rotation_matrix(xc(6));
+    %1st gaussian
+    xdatarot1=XY1*rotM1;
+    xdatarot1(:,1)=xdatarot1(:,1)+xc(2);
+    xdatarot1(:,2)=xdatarot1(:,2)+xc(3);
+    g1space  = exp(   -((xdatarot1(:,1)-xc(2)).^2/(2*xc(4)^2) + (xdatarot1(:,2)-xc(3)).^2/(2*xc(5)^2) )    );
+    datamix.data=cat(2,g1space,XYt_i);
+
+    %seed the optimisation problem at several
+    %locations, might take awhile
+    if case_two_strong_components && case_separated_peaks
+        problem = createOptimProblem('lsqcurvefit',...
+            'x0',B0,'objective',@Gaussian_Sum_Rot_center_surround_sep_faster,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
+    else
+        disp('center-surround case - why?');
+        problem = createOptimProblem('lsqcurvefit',...
+            'x0',B0,'objective',@Gaussian_Sum_Rot_center_surround_sep_sigmoid_cost,'xdata',datamix,'ydata',RFaroundpeak_clean,'lb',Bminpos,'ub',Bmaxpos,'options',myopts);
+    end
+    ms = MultiStart;
+    [x,f] = run(ms,problem,20);
+
+    %% update the center amplitude and set surround
+    RFprops(i).center=[x(1), xc(2:end)];
+    RFprops(i).surround=x(2:end);
+    center=RFprops(i).center;
+    surround=RFprops(i).surround;
+
+    %compute correlation of the pixels in the surround with the pixels
+    %in the center; %this value might indicate the goodness of fit
+    center_mask=make_ellipse_mask(nrow,ncol, center(2:end));
+    surround_mask=make_ellipse_mask(nrow,ncol, surround(2:end));
+    surround_mask=surround_mask-center_mask;
+    surround_mask(surround_mask<0)=0;
+    RFprops(i).center_mask = center_mask;
+    RFprops(i).surround_mask = surround_mask;
+
+    mean_center=zeros(1,nhist);
+    mean_surround=zeros(1,nhist);
+    for ii=1:nhist
+        ci=RFi_nomean(:,:,ii).*center_mask;
+        si=RFi_nomean(:,:,ii).*surround_mask;
+        mean_center(ii)=mean(nonzeros(ci));
+        mean_surround(ii)=mean(nonzeros(si));
+    end
+    tst=max(1,tpeak-twin_corr);
+    ten=min(nhist,tpeak+twin_corr);
+    cr=corrcoef(mean_center(tst:ten),mean_surround(tst:ten));
+    RFprops(i).surround_center_corr = cr(1,2);
+
+    model_center_surround = Gaussian_Sum_Rot_center_surround_sep([center, surround],XYtim);
+    RFprops(i).model = model_center_surround;
+
+    if make_figure
+        filename=['n',num2str(i),'_tpeak',num2str(tpeak)];
+        figure_name = fullfile(resfolder,filename);
+        title_str=['Cluster ',num2str(i),', c-s corr ',num2str(cr(1,2)),'.'];
+        make_data_model_figure(RFaroundpeak,model_center_surround, center, surround,title_str,figure_name);
+    end
+
+    %every time step fit scale parameters of the gaussians
+    lambdas=[0.5,0.5];
+    lambdas_min=[-Inf,-Inf];
+    lambdas_max=[Inf,Inf];
+    center_dynamics=zeros(nhist,1);
+    surr_dynamics=zeros(nhist,1);
+    datamix.param = [RFprops(i).center, RFprops(i).surround];
+    datamix.xdata = XYt_i;
+    for ti=1:nhist
+        RFii = RFi_nomean(:,:,ti);
+        RFii = RFii(:);
+        RFii =RFii(corrmask_colfmt); %data to fit, only nonzero values
+        [lambdas_fit,resnorm,residual,exitflag] = lsqcurvefit(@Gaussian_Mixture_Rot_oppositesign_colfmt,lambdas,datamix,RFii,lambdas_min,lambdas_max, myopts);
+        center_dynamics(ti)=lambdas_fit(1);
+        surr_dynamics(ti)=(-1)*sign(lambdas_fit(1))*lambdas_fit(2);
+    end
+
+    RFprops(i).center_dynamics=center_dynamics;
+    RFprops(i).surround_dynamics=surr_dynamics;
+end
     
 if ~isempty(cluster_info_tsv_file)
     RFprops = set_depth_property(RFprops, cluster_info_tsv_file);    
 end
 % propsfile=fullfile(resfolder,'RF_props.mat');
 %save the properties after the fitting
-save(file2save, 'RFprops','-v7.3');
+% save(file2save, 'RFprops','-v7.3');
 RFprops = gaussian_mixture_RF_properties_circular(RF,RFprops);
-
 end
 
 function elmask= make_ellipse_mask(nrow,ncol, el)
