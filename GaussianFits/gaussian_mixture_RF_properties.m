@@ -1,12 +1,11 @@
-function RFprops = gaussian_mixture_RF_properties_circular(RF,RFprops)
+function RFprops = gaussian_mixture_RF_properties(RF,RFprops)
 %% this function takes the values of the guassians fitted to the RF
-%  and computes different charachteristics using these gaussians.
+%  and computes different charachteristics 
 %  The new values are added as new fields to the RFprops structure.
 %  The list of computed values:
 %  - distance and angle between pos and neg guassuan peaks
 %  - distance and angle between center of mass of pos and neg components
 %  - time between the pos and neg peak
-%  - half width of the center temporal dynamics
 %  - masks of pos and neg gaussians (ellipses of 2sigma)
 %  - average data and model values within the masks
 %  - maximum data and model values within the masks
@@ -20,24 +19,14 @@ function RFprops = gaussian_mixture_RF_properties_circular(RF,RFprops)
 %%     %RFprops contains the following fields:
 %     filelename %name of the RF raw file
 %     error %error message
-% params of pos and negative guassians
+%     params of pos and negative guassians:
 %     center (the stronger component)
 %     surround
-% scaling params of the mixture
+%     scaling params of the mixture:
 %     center_dynamics
-%     center_dynamics
-%
+%     surround_dynamics%
 %     correlation btw center and surround around the peak of the center
-%
-%
-%
-%     %parameters computed from fitting gaussian to the dynamics
-%     %half width of temporal dynamics
-%     hw_pos, hw_neg
-%     %heigth and location of the peak of gaussians
-%     peakheight_pos, peakheight_neg, peakloc_pos, peakloc_neg
 %%
-%     res_folder ='C:\DATA\Data_for_Olga\retina\';
 %the method requires the mean of the RF to be at zero (for curve fitting to work)
 %if RF has range [0,1] or [0,255] then set substract_mean=1 and the
 %method will transform it to [-0.5, 0.5] or [-127,127] by substracting
@@ -80,6 +69,7 @@ for i=1:ncl
         RFi_nomean = RFi;
     end
 
+    % get the image of the model
     if RFprops(i).center_exist==1 && RFprops(i).surround_exist==1
         model=Gaussian_Sum_Rot_center_surround_sep([RFprops(i).center,RFprops(i).surround],XY);
     elseif RFprops(i).center_exist==1
@@ -146,10 +136,8 @@ for i=1:ncl
         %distance between gaussian centers
         d=sqrt((mxs-mxc)^2+(mys-myc)^2);
         d_weightedcenters=sqrt((xsw-xcw)^2+(ysw-ycw)^2);
-        %angle between gaussian centers and horizontal
-        %             alpha=acos(dot([mxs-mxc, mys-myc],[1,0])/d);
-        alpha = atan2(mys-myc, mxs-mxc);
-        %             alpha_weightedcenters=acos(dot([xsw-xcw, ysw-ycw],[1,0])/d_weightedcenters);
+        %angle between gaussian centers and horizontal        
+        alpha = atan2(mys-myc, mxs-mxc);        
         alpha_weightedcenters = atan2(ysw-ycw, xsw-xcw);
         %time between the time peaks as fitted from gaussians
         if maxcenter>maxsurr, maxt=maxcenter_t;
@@ -204,7 +192,7 @@ for i=1:ncl
         alpha_weightedcenters_circ=nan; alpha_data_mask=nan;
     end
 
-    %% save orientation of the min-max line computer on the RF
+    %% save orientation of the min-max line computed on the RF
     [RFijmax,tmaxind] = max(RFi_nomean(:));
     [RFijmin,tminind] = min(RFi_nomean(:));
     [ypeakp, xpeakp, tpeakp] = ind2sub(size(RFi_nomean),tmaxind);

@@ -30,9 +30,8 @@
 % O.Symonova
 % 11.02.2021
 
-function RFprops = RF_gaussian_mixture_circular(rf, resfolder,file2save)
+function RFprops = RF_gaussian_mixture(rf, resfolder,file2save)
 
-%if RF array has different sequence shift dimentions accordingly
 cluster_info_tsv_file=[];
 
 make_figure = 0;
@@ -48,6 +47,7 @@ addpath("../RFAnalysis/");
 RF = normalize_filter(RF);
 
 %expecteds sequence of dimensions is [nrow, ncol, ntframes, nclusters]
+%if RF array has different sequence shift dimentions accordingly
 RF=shiftdim(RF,1);
 RF=double(RF);
     
@@ -115,7 +115,7 @@ peak2noise_log_threshold=15;
     
 disp(ncl);
 
-
+%% iterate thru neurons
 for i=1:ncl
     disp(['Processing cluster ',num2str(i),'.']);
     RFi=RF(:,:,:,i);
@@ -374,7 +374,7 @@ end
 % propsfile=fullfile(resfolder,'RF_props.mat');
 %save the properties after the fitting
 % save(file2save, 'RFprops','-v7.3');
-RFprops = gaussian_mixture_RF_properties_circular(RF,RFprops);
+RFprops = gaussian_mixture_RF_properties(RF,RFprops);
 end
 
 function elmask= make_ellipse_mask(nrow,ncol, el)
