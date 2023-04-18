@@ -1,8 +1,16 @@
 %% use this script to fit a mixture of two gaussions to RF.
-% RF of one neuron is the 3D array [rows,columns, time_samples]
+% Inputs:
+%     rf: matrix [row,col,timelags,cells]. Can also be a struct with field
+%        'rf.filter' containing the matrix and (optional) 'rf.bg_mean' with
+%         the background to be subtracted
+%     res_folder (optional): will save a fig showing the fit for each neuron (slow)
+%     file2savee (optional): filepath of where to save results, 
+%         defaults to RF_gaussian_properties.mat
+%     
+
+% For each neuron, 
 % two gaussians (with positive and negative amplitudes) will be fitted
-% then at every time step the mixture
-% coefficients for these gaussins will be fitted
+% then at every time step the mixture coefficients for these gaussians will be fitted
 
 % General description:
 % First I clean the RF by setting to 0 (and 1) those pixels that have weak 
@@ -34,14 +42,25 @@ function RFprops = RF_gaussian_mixture(rf, resfolder,file2save)
 
 cluster_info_tsv_file=[];
 
-make_figure = 0;
+if nargin < 2
+    make_figure = 0;
+else
+    make_figure = 1;
+end
 
-% load(fileRF);
+if nargin < 3
+    file2save = "RF_gaussian_properties.mat";
+end
+
 if isfield(rf, 'bg_mean')
     RF=rf.filter-rf.bg_mean;
-else
+elseif isfield(rf, 'filter')
     RF = rf.filter;
+else
+    RF = rf;
 end
+
+
 RF=squeeze(RF);
 addpath("../RFAnalysis/");
 RF = normalize_filter(RF);
@@ -373,8 +392,10 @@ if ~isempty(cluster_info_tsv_file)
 end
 % propsfile=fullfile(resfolder,'RF_props.mat');
 %save the properties after the fitting
-% save(file2save, 'RFprops','-v7.3');
 RFprops = gaussian_mixture_RF_properties(RF,RFprops);
+
+save(file2save, 'RFprops','-v7.3');
+
 end
 
 function elmask= make_ellipse_mask(nrow,ncol, el)
