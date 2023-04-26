@@ -1,6 +1,6 @@
 %% use this script to fit a mixture of two gaussions to RF.
 % Inputs:
-%     rf: matrix [row,col,timelags,cells]. Can also be a struct with field
+%     rf: matrix [cells,row,col,timelags]. Can also be a struct with field
 %        'rf.filter' containing the matrix and (optional) 'rf.bg_mean' with
 %         the background to be subtracted
 %     res_folder (optional): will save a fig showing the fit for each neuron (slow)
